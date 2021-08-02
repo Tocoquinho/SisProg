@@ -30,9 +30,54 @@ void reacaoErro() {
     printf("erro\n");
 }
 
-// Indica erro de execucao
+// Atualiza o acumulador com o número fornecido
+void reacaoAtualizaAcumulador() {
+    acumulador = acumuladorInterno;
+    acumuladorInterno = 0;
+}
+
+// Armazena o digito fornecido
 void reacaoLerDigito() {
-    acumuladorInterno += charEvento - '0';
+    acumuladorInterno = acumuladorInterno*10 + (charEvento - '0');
+}
+
+// Armazena a operação fornecida
+void reacaoLerOperacao() {
+    operacao = charEvento;
+}
+
+// Armazena a operação fornecida e o numero obtido no acumulador interno
+void reacaoLerOperacaoSalvarNum() {
+    reacaoLerOperacao();
+    operando1 = acumuladorInterno;
+    acumuladorInterno = 0;
+}
+
+// Armazena a operação fornecida e atribui o valor do operando 1
+void reacaoLerOperacaoAtualizarOperando() {
+    reacaoLerOperacao();
+    operando1 = acumulador;
+}
+
+// Armazena o valor do operando 2 e realiza a operação desejada
+void reacaoRealizaOperacao() {
+    operando2 = acumuladorInterno;
+    acumuladorInterno = 0;
+
+    if(operacao == '+'){
+        acumulador = operando1 + operando2;
+    }
+    else if(operacao == '-'){
+        acumulador = operando1 - operando2;
+    }
+    else if(operacao == '*'){
+        acumulador = operando1 * operando2;
+    }
+    else if(operacao == '/'){
+        acumulador = operando1 / operando2;
+    }
+    printf("%d %d\n", operando1, operando2);
+    printf("%d\n\n", acumulador);
 }
 
 typedef struct {
@@ -41,11 +86,11 @@ typedef struct {
 } Reacao;
 
 // REACOES[s][e] = reacao a partir do estado "s" e evento de tipo "e"
-const Reacao REACOES[5][6] = {
+const Reacao REACOES[10][7] = {
     {
         // Estado INICIAL
         /*DIGITO*/ {NUM1, reacaoLerDigito},
-        /*OP    */ {NUM2REG2, NULL},
+        /*OP    */ {NUM2REG2, reacaoLerOperacaoAtualizarOperando},
         /*R     */ {REG1, NULL},
         /*TIL   */ {ESPERA, NULL},
         /*X     */ {ESPERA, NULL},
@@ -55,11 +100,11 @@ const Reacao REACOES[5][6] = {
     {
         // Estado NUM1
         /*DIGITO*/ {NUM1, reacaoLerDigito},
-        /*OP    */ {NUM2REG2, NULL},
+        /*OP    */ {NUM2REG2, reacaoLerOperacaoSalvarNum},
         /*R     */ {TERMINAL, reacaoErro},
         /*TIL   */ {TERMINAL, reacaoErro},
         /*X     */ {TERMINAL, reacaoErro},
-        /*ENTER */ {INICIAL, NULL},
+        /*ENTER */ {INICIAL, reacaoAtualizaAcumulador},
         /*P     */ {TERMINAL, reacaoErro},
     },
     {
@@ -69,7 +114,7 @@ const Reacao REACOES[5][6] = {
         /*R     */ {TERMINAL, reacaoErro},
         /*TIL   */ {TERMINAL, reacaoErro},
         /*X     */ {TERMINAL, reacaoErro},
-        /*ENTER */ {INICIAL, NULL},
+        /*ENTER */ {INICIAL, reacaoRealizaOperacao},
         /*P     */ {TERMINAL, reacaoErro},
     },
     {
@@ -85,7 +130,7 @@ const Reacao REACOES[5][6] = {
         {
         // Estado REG1A
         /*DIGITO*/ {TERMINAL, reacaoErro},
-        /*OP    */ {NUM2REG2, NULL},
+        /*OP    */ {NUM2REG2, reacaoLerOperacao},
         /*R     */ {TERMINAL, reacaoErro},
         /*TIL   */ {TERMINAL, reacaoErro},
         /*X     */ {TERMINAL, reacaoErro},
