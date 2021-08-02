@@ -1,66 +1,109 @@
 #include "stdio.h"
 
 // Define um valor numerico para cada um dos cinco estados possiveis
-enum Estado { INICIAL, NUM1, NUM2, REG1, REG1A, REG2, REG2A, NUM2REG2, ESPERA, TERMINAL };
+enum Estado {
+    INICIO,
+    NUM1,
+    NUM2,
+    REG1,
+    REG1A,
+    REG2,
+    REG2A,
+    NUM2REG2,
+    ESPERA,
+    SET,
+    BP,
+    PB,
+    P_INICIO,
+    P_CODIGO,
+    P_ARG,
+    P_LISTAR,
+    TERMINAL
+};
 
 // Define um valor numerico para cada um dos seis tipos de eventos possiveis
-enum TipoDeEvento { DIGITO, OP_ARIT, IGUAL, R, TIL, X, ENTER, P };
+enum TipoDeEvento {
+    DIGITO,
+    OP_ARIT,
+    IGUAL,
+    R,
+    TIL,
+    X,
+    ENTER,
+    P,
+    L,
+    E_COMERCIAL,
+    OUTROS
+};
 
 #define NUM_REG 10
 #define NUM_LINHAS 0x1024
 #define COMPRIMENTO_MAX_LINHA 0x32
 
-unsigned char mem[NUM_LINHAS*COMPRIMENTO_MAX_LINHA];  // memoria programável
-unsigned int regs[NUM_REG]; // registradores
-int estado = INICIAL;  // estado da maquina de estados
-int charEvento = 0;    // char lido da entrada padrao (stdin)
-int tipoDeEvento = 0;  // tipo de evento associado ao char (ARROBA, L, X, ...)
+unsigned char mem[NUM_LINHAS][COMPRIMENTO_MAX_LINHA + 1]; // memoria programável
+unsigned int regs[NUM_REG];                               // registradores
+int estado = INICIO;  // estado da maquina de estados
+int charEvento = 0;   // char lido da entrada padrao (stdin)
+int tipoDeEvento = 0; // tipo de evento associado ao char (ARROBA, L, X, ...)
 
-int operacao = 0;    // operacao a ser realizada (+,-,*,/)
-int acumulador = 0;  //
-int acumuladorInterno = 0;  // usado na leitura de numeros do usuario
-int operando1 = 0;   // primeiro operando
-int operando2 = 0;   // segundo operando
-int ulitmoReg = 0;   // guarda o ultimo registrador referenciado em algum operando
+int operacao = 0;            // operacao a ser realizada (+,-,*,/)
+int acumulador = 0;          //
+int registradorAuxiliar = 0; // usado na leitura de numeros do usuario
+int operando1 = 0;           // primeiro operando
+int ultimoReg = 0; // guarda o ultimo registrador referenciado em algum operando
+
+int linha = 0;  // posicao do cursor
+int coluna = 0; // na memoria
 
 /********************************
  *********** REACOES ************
  ********************************/
 
+void printAcc() { printf("> %d\n\n", acumulador); }
+
 // Indica erro de execucao
-void reacaoErro() {
-    printf("erro\n");
-}
+void reacaoErro() { printf("erro: caractere invalido '%c'\n", charEvento); }
 
 // Atualiza o acumulador com o número fornecido
 void reacaoAtualizaAcumulador() {
-    acumulador = acumuladorInterno;
-    acumuladorInterno = 0;
-    printf("> %d\n\n", acumulador);
+    acumulador = registradorAuxiliar;
+    registradorAuxiliar = 0;
+    printAcc();
 }
 
 // Armazena o digito fornecido
 void reacaoLerDigito() {
-    acumuladorInterno = acumuladorInterno*10 + (charEvento - '0');
+    registradorAuxiliar = registradorAuxiliar * 10 + (charEvento - '0');
 }
 
 // Armazena o valor do registrador especificado
 void reacaoLerRegistrador() {
-    ulitmoReg = charEvento - '0';
-    acumuladorInterno = regs[ulitmoReg];
+    ultimoReg = charEvento - '0';
+    registradorAuxiliar = regs[ultimoReg];
 }
 
-
 // Armazena a operação fornecida
-void reacaoLerOperacao() {
-    operacao = charEvento;
+void reacaoLerOperacao() { operacao = charEvento; }
+
+void reacaoSetOperando1() {
+    operando1 = registradorAuxiliar;
+    registradorAuxiliar = 0;
+}
+
+void reacaoRealizaTilOuX() {
+    if (operacao == '~') {
+        acumulador = -acumulador;
+        printAcc();
+    } else if (operacao == 'X') {
+        printf("TODO: executar o interpretador");
+    }
 }
 
 // Armazena a operação fornecida e o numero obtido no acumulador interno
 void reacaoLerOperacaoSalvarNum() {
     reacaoLerOperacao();
-    operando1 = acumuladorInterno;
-    acumuladorInterno = 0;
+    operando1 = registradorAuxiliar;
+    registradorAuxiliar = 0;
 }
 
 // Armazena a operação fornecida e atribui o valor do operando 1
@@ -69,137 +112,40 @@ void reacaoLerOperacaoAtualizarOperando() {
     operando1 = acumulador;
 }
 
-// Armazena o valor do operando 2 e realiza a operação desejada
-void reacaoRealizaOperacao() {
-    operando2 = acumuladorInterno;
-    acumuladorInterno = 0;
-
-    if(operacao == '+'){
-        acumulador = operando1 + operando2;
-    }
-    else if(operacao == '-'){
-        acumulador = operando1 - operando2;
-    }
-    else if(operacao == '*'){
-        acumulador = operando1 * operando2;
-    }
-    else if(operacao == '/'){
-        acumulador = operando1 / operando2;
-    }
-    else if(operacao == '='){
-        regs[ulitmoReg] = operando1;
-    }
-    // printf("%d %d\n", operando1, operando2);
-    printf("> %d\n\n", acumulador);
+void reacaoLerCodigo() {
+    mem[linha][coluna] = charEvento;
+    coluna++;
 }
 
-typedef struct {
-    int proxEstado;  // Proximo estado
-    void (*fn)();    // Funcao a ser executada nessa reacao
-} Reacao;
+void reacaoProximaLinha() {
+    mem[linha][coluna] = '\0';
+    linha += 1;
+    coluna = 0;
+}
 
-// REACOES[s][e] = reacao a partir do estado "s" e evento de tipo "e"
-const Reacao REACOES[10][8] = {
-    {
-        // Estado INICIAL
-        /*DIGITO */ {NUM1, reacaoLerDigito},
-        /*OP_ARIT*/ {NUM2REG2, reacaoLerOperacaoAtualizarOperando},
-        /*IGUAL  */ {NUM2REG2, reacaoLerOperacaoAtualizarOperando},
-        /*R      */ {REG1, NULL},
-        /*TIL    */ {ESPERA, NULL},
-        /*X      */ {ESPERA, NULL},
-        /*ENTER  */ {INICIAL, NULL},
-        /*P      */ {INICIAL, NULL},
-    },
-    {
-        // Estado NUM1
-        /*DIGITO */ {NUM1, reacaoLerDigito},
-        /*OP_ARIT*/ {NUM2REG2, reacaoLerOperacaoSalvarNum},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {TERMINAL, reacaoErro},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {INICIAL, reacaoAtualizaAcumulador},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-    {
-        // Estado NUM2
-        /*DIGITO */ {NUM2, reacaoLerDigito},
-        /*OP_ARIT*/ {TERMINAL, reacaoErro},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {TERMINAL, reacaoErro},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {INICIAL, reacaoRealizaOperacao},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-    {
-        // Estado REG1
-        /*DIGITO */ {REG1A, reacaoLerRegistrador},
-        /*OP_ARIT*/ {TERMINAL, reacaoErro},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {TERMINAL, reacaoErro},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {TERMINAL, reacaoErro},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-    {
-        // Estado REG1A
-        /*DIGITO */ {TERMINAL, reacaoErro},
-        /*OP_ARIT*/ {NUM2REG2, reacaoLerOperacaoSalvarNum},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {TERMINAL, reacaoErro},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {INICIAL, reacaoAtualizaAcumulador},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-    {
-        // Estado REG2
-        /*DIGITO */ {REG2A, reacaoLerRegistrador},
-        /*OP_ARIT*/ {TERMINAL, reacaoErro},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {TERMINAL, reacaoErro},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {TERMINAL, reacaoErro},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-    {
-        // Estado REG2A
-        /*DIGITO */ {TERMINAL, reacaoErro},
-        /*OP_ARIT*/ {TERMINAL, reacaoErro},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {TERMINAL, reacaoErro},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {INICIAL, reacaoRealizaOperacao},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-        {
-        // Estado NUM2REG2
-        /*DIGITO */ {NUM2, reacaoLerDigito},
-        /*OP_ARIT*/ {TERMINAL, reacaoErro},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {REG2, NULL},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {TERMINAL, reacaoErro},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-    {
-        // Estado ESPERA
-        /*DIGITO */ {TERMINAL, reacaoErro},
-        /*OP_ARIT*/ {TERMINAL, reacaoErro},
-        /*IGUAL  */ {TERMINAL, NULL},
-        /*R      */ {TERMINAL, reacaoErro},
-        /*TIL    */ {TERMINAL, reacaoErro},
-        /*X      */ {TERMINAL, reacaoErro},
-        /*ENTER  */ {INICIAL, NULL},
-        /*P      */ {TERMINAL, reacaoErro},
-    },
-};
+// Armazena o valor do operando 2 e realiza a operação desejada
+void reacaoRealizaOperacao() {
+    int operando2 = registradorAuxiliar;
+    registradorAuxiliar = 0;
+
+    if (operacao == '+') {
+        acumulador = operando1 + operando2;
+    } else if (operacao == '-') {
+        acumulador = operando1 - operando2;
+    } else if (operacao == '*') {
+        acumulador = operando1 * operando2;
+    } else if (operacao == '/') {
+        acumulador = operando1 / operando2;
+    } else if (operacao == '=') {
+        regs[ultimoReg] = acumulador;
+    }
+
+    if (operacao == '=') {
+        printf("> R%d=%d\n\n", ultimoReg, regs[ultimoReg]);
+    } else {
+        printAcc();
+    }
+}
 
 /********************************
  ******* MOTOR DE EVENTOS *******
@@ -207,12 +153,12 @@ const Reacao REACOES[10][8] = {
 
 // Obtem um evento da entrada padrao (stdin).
 // Retorna 1 se foi possivel obter um evento, 0 caso contrario.
-int extrairEvento() {
+void extrairEvento() {
     charEvento = getc(stdin);
-    if (('0' <= charEvento && charEvento <= '9')) {  // digitos 0-9
+    if (('0' <= charEvento && charEvento <= '9')) { // digitos 0-9
         tipoDeEvento = DIGITO;
-    } else if (charEvento == '+' || charEvento == '-' ||
-               charEvento == '*' || charEvento == '/') {
+    } else if (charEvento == '+' || charEvento == '-' || charEvento == '*' ||
+               charEvento == '/') {
         tipoDeEvento = OP_ARIT;
     } else if (charEvento == '=') {
         tipoDeEvento = IGUAL;
@@ -226,26 +172,267 @@ int extrairEvento() {
         tipoDeEvento = ENTER;
     } else if (charEvento == 'P') {
         tipoDeEvento = P;
+    } else if (charEvento == 'L') {
+        tipoDeEvento = L;
+    } else if (charEvento == '&') {
+        tipoDeEvento = E_COMERCIAL;
     } else {
-        return 0;
+        tipoDeEvento = OUTROS;
     }
-    return 1;
 }
 
 int main() {
     while (estado != TERMINAL) {
-        if (!extrairEvento()) {
-            // Termina o programa se nao for possivel ler o evento
-            reacaoErro();
+        extrairEvento();
+
+        switch (estado) {
+        case INICIO:
+            switch (tipoDeEvento) {
+            case DIGITO:
+                estado = NUM1;
+                reacaoLerDigito();
+                break;
+            case R:
+                estado = REG1;
+                break;
+            case ENTER:
+                // sem efeito
+                break;
+            case TIL:
+            case X:
+                estado = ESPERA;
+                reacaoLerOperacao();
+                break;
+            case OP_ARIT:
+                estado = NUM2REG2;
+                reacaoLerOperacaoAtualizarOperando();
+                break;
+            case IGUAL:
+                estado = SET;
+                reacaoLerOperacao();
+                break;
+            case P:
+                estado = BP;
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case NUM1:
+            switch (tipoDeEvento) {
+            case DIGITO:
+                estado = NUM1;
+                reacaoLerDigito();
+                break;
+            case OP_ARIT:
+                estado = NUM2REG2;
+                reacaoLerOperacaoSalvarNum();
+                break;
+            case ENTER:
+                estado = INICIO;
+                reacaoAtualizaAcumulador();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case NUM2:
+            switch (tipoDeEvento) {
+            case DIGITO:
+                estado = NUM2;
+                reacaoLerDigito();
+                break;
+            case ENTER:
+                estado = INICIO;
+                reacaoRealizaOperacao();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case REG1:
+            switch (tipoDeEvento) {
+            case DIGITO:
+                estado = REG1A;
+                reacaoLerRegistrador();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case REG1A:
+            switch (tipoDeEvento) {
+            case OP_ARIT:
+                estado = NUM2REG2;
+                reacaoLerOperacaoSalvarNum();
+                break;
+            case ENTER:
+                estado = INICIO;
+                reacaoAtualizaAcumulador();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case REG2:
+            switch (tipoDeEvento) {
+            case DIGITO:
+                estado = REG2A;
+                reacaoLerRegistrador();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case REG2A:
+            switch (tipoDeEvento) {
+            case ENTER:
+                estado = INICIO;
+                reacaoRealizaOperacao();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case NUM2REG2:
+            switch (tipoDeEvento) {
+            case R:
+                estado = REG2;
+                break;
+            case DIGITO:
+                estado = NUM2;
+                reacaoLerDigito();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case ESPERA:
+            switch (tipoDeEvento) {
+            case ENTER:
+                estado = INICIO;
+                reacaoRealizaTilOuX();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case SET:
+            switch (tipoDeEvento) {
+            case R:
+                estado = REG2;
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case BP:
+            switch (tipoDeEvento) {
+            case ENTER:
+                estado = P_INICIO;
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case PB:
+            switch (tipoDeEvento) {
+            case ENTER:
+                estado = INICIO;
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case P_INICIO:
+            switch (tipoDeEvento) {
+            case E_COMERCIAL:
+                reacaoLerOperacao();
+                estado = P_ARG;
+                break;
+            case L:
+                reacaoLerOperacao();
+                estado = P_LISTAR;
+                break;
+            case P:
+                estado = PB;
+                break;
+            case ENTER:
+                reacaoProximaLinha();
+                break;
+            default:
+                estado = P_CODIGO;
+                reacaoLerCodigo();
+                break;
+            }
+            break;
+        case P_CODIGO:
+            switch (tipoDeEvento) {
+            case ENTER:
+                estado = P_INICIO;
+                reacaoProximaLinha();
+                break;
+            default:
+                reacaoLerCodigo();
+                break;
+            }
+            break;
+        case P_ARG:
+            switch (tipoDeEvento) {
+            case ENTER:
+                estado = P_INICIO;
+                reacaoSetOperando1();
+                break;
+            case DIGITO:
+                estado = P_ARG;
+                reacaoLerDigito();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
+            break;
+        case P_LISTAR:
+            switch (tipoDeEvento) {
+            case ENTER:
+                estado = P_INICIO;
+                reacaoLerOperacao();
+                break;
+            case DIGITO:
+                estado = P_ARG;
+                reacaoLerDigito();
+                break;
+            default:
+                estado = TERMINAL;
+                reacaoErro();
+                break;
+            }
             break;
         }
-
-        // Obtem o proximo estado e a funcao a ser executada
-        const Reacao *r = &REACOES[estado][tipoDeEvento];
-
-        if (r->fn != NULL) {
-            r->fn();  // Executa a funcao, caso ela exista
-        }
-        estado = r->proxEstado;  // Atualiza o estado
     }
 }
