@@ -1,149 +1,162 @@
 #include "stdio.h"
 
-// Define um valor numerico para cada um dos cinco estados possiveis
-enum Estado {
-    INICIO,
-    NUM1,
-    NUM2,
-    REG1,
-    REG1A,
-    REG2,
-    REG2A,
-    NUM2REG2,
-    ESPERA,
-    SET,
-    BP,
-    PB,
-    P_INICIO,
-    P_CODIGO,
-    P_ARG,
-    P_LISTAR,
-    TERMINAL
+// Define um valor numerico para cada um dos estados possiveis para a
+// calculadora
+enum Calc_Estado {
+    CALC_INICIO,
+    CALC_NUM1,
+    CALC_NUM2,
+    CALC_REG1,
+    CALC_REG1A,
+    CALC_REG2,
+    CALC_REG2A,
+    CALC_NUM2REG2,
+    CALC_ESPERA,
+    CALC_SET,
+    CALC_BP,
+    CALC_PB,
+    CALC_P_INICIO,
+    CALC_P_CODIGO,
+    CALC_P_ARG,
+    CALC_P_LISTAR,
+    CALC_TERMINAL,
 };
 
-// Define um valor numerico para cada um dos seis tipos de eventos possiveis
-enum TipoDeEvento {
-    DIGITO,
-    OP_ARIT,
-    IGUAL,
-    R,
-    TIL,
-    X,
-    ENTER,
-    P,
-    L,
-    E_COMERCIAL,
-    OUTROS
+// Define um valor numerico para cada um dos tipos de eventos possiveis para a
+// calculadora
+enum Calc_TipoDeEvento {
+    CALC_DIGITO,
+    CALC_OP_ARIT,
+    CALC_IGUAL,
+    CALC_R,
+    CALC_TIL,
+    CALC_C,
+    CALC_S,
+    CALC_ENTER,
+    CALC_P,
+    CALC_L,
+    CALC_E_COMERCIAL,
+    CALC_OUTROS,
 };
 
+// numero de registradores
 #define NUM_REG 10
+
+// numero de linhas programaveis
 #define NUM_LINHAS 0x1024
+
+// comprimento maximo de uma linha programavel
 #define COMPRIMENTO_MAX_LINHA 0x32
 
-unsigned char mem[NUM_LINHAS][COMPRIMENTO_MAX_LINHA + 1]; // memoria programável
-unsigned int regs[NUM_REG];                               // registradores
-int estado = INICIO;  // estado da maquina de estados
-int charEvento = 0;   // char lido da entrada padrao (stdin)
-int tipoDeEvento = 0; // tipo de evento associado ao char (ARROBA, L, X, ...)
+unsigned char programa[NUM_LINHAS][COMPRIMENTO_MAX_LINHA + 1]; // memoria programável
+unsigned int calc_regs[NUM_REG];                               // registradores
+int calc_estado = CALC_INICIO; // estado da maquina de estados
+int calc_charEvento = 0;       // char lido da entrada padrao (stdin)
+int calc_tipoDeEvento = 0;     // tipo do evento (Calc_TIPO_DE_EVENTO)
 
-int operacao = 0;            // operacao a ser realizada (+,-,*,/)
-int acumulador = 0;          //
-int registradorAuxiliar = 0; // usado na leitura de numeros do usuario
-int operando1 = 0;           // primeiro operando
-int ultimoReg = 0; // guarda o ultimo registrador referenciado em algum operando
+int calc_operacao = 0;            // operacao a ser realizada (+,-,*,/)
+int calc_acumulador = 0;          // acumulador da calculadora
+int calc_registradorAuxiliar = 0; // usado na leitura de numeros do usuario
+int calc_operando1 = 0;           // primeiro operando em operacoes binarias
 
-int linha = 0;  // posicao do cursor
-int coluna = 0; // na memoria
+// guarda o ultimo registrador que foi referenciado em algum operando
+int calc_ultimoReg = 0;
+
+int calc_linha = 0;  // posicao do cursor
+int calc_coluna = 0; // na memoria
 
 /********************************
  *********** REACOES ************
  ********************************/
 
-void printAcc() { printf("> %d\n\n", acumulador); }
+void calc_printAcc() { printf("> %d\n\n", calc_acumulador); }
 
 // Indica erro de execucao
-void reacaoErro() { printf("erro: caractere invalido '%c'\n", charEvento); }
+void calc_reacaoErro() {
+    printf("erro: caractere invalido '%c'\n", calc_charEvento);
+}
 
 // Atualiza o acumulador com o número fornecido
 void reacaoAtualizaAcumulador() {
-    acumulador = registradorAuxiliar;
-    registradorAuxiliar = 0;
-    printAcc();
+    calc_acumulador = calc_registradorAuxiliar;
+    calc_registradorAuxiliar = 0;
+    calc_printAcc();
 }
 
 // Armazena o digito fornecido
-void reacaoLerDigito() {
-    registradorAuxiliar = registradorAuxiliar * 10 + (charEvento - '0');
+void calc_reacaoLerDigito() {
+    calc_registradorAuxiliar =
+        calc_registradorAuxiliar * 10 + (calc_charEvento - '0');
 }
 
 // Armazena o valor do registrador especificado
-void reacaoLerRegistrador() {
-    ultimoReg = charEvento - '0';
-    registradorAuxiliar = regs[ultimoReg];
+void calc_reacaoLerRegistrador() {
+    calc_ultimoReg = calc_charEvento - '0';
+    calc_registradorAuxiliar = calc_regs[calc_ultimoReg];
 }
 
 // Armazena a operação fornecida
-void reacaoLerOperacao() { operacao = charEvento; }
+void calc_reacaoLerOperacao() { calc_operacao = calc_charEvento; }
 
-void reacaoSetOperando1() {
-    operando1 = registradorAuxiliar;
-    registradorAuxiliar = 0;
+void calc_reacaoSetOperando1() {
+    calc_operando1 = calc_registradorAuxiliar;
+    calc_registradorAuxiliar = 0;
 }
 
-void reacaoRealizaTilOuX() {
-    if (operacao == '~') {
-        acumulador = -acumulador;
-        printAcc();
-    } else if (operacao == 'X') {
+void calc_reacaoRealizaTilOuX() {
+    if (calc_operacao == '~') {
+        calc_acumulador = -calc_acumulador;
+        calc_printAcc();
+    } else if (calc_operacao == 'X') {
         printf("TODO: executar o interpretador");
     }
 }
 
 // Armazena a operação fornecida e o numero obtido no acumulador interno
-void reacaoLerOperacaoSalvarNum() {
-    reacaoLerOperacao();
-    operando1 = registradorAuxiliar;
-    registradorAuxiliar = 0;
+void calc_reacaoLerOperacaoSalvarNum() {
+    calc_reacaoLerOperacao();
+    calc_operando1 = calc_registradorAuxiliar;
+    calc_registradorAuxiliar = 0;
 }
 
 // Armazena a operação fornecida e atribui o valor do operando 1
-void reacaoLerOperacaoAtualizarOperando() {
-    reacaoLerOperacao();
-    operando1 = acumulador;
+void calc_reacaoLerOperacaoAtualizarOperando() {
+    calc_reacaoLerOperacao();
+    calc_operando1 = calc_acumulador;
 }
 
-void reacaoLerCodigo() {
-    mem[linha][coluna] = charEvento;
-    coluna++;
+void calc_reacaoLerCodigo() {
+    programa[calc_linha][calc_coluna] = calc_charEvento;
+    calc_coluna++;
 }
 
-void reacaoProximaLinha() {
-    mem[linha][coluna] = '\0';
-    linha += 1;
-    coluna = 0;
+void calc_reacaoProximaLinha() {
+    programa[calc_linha][calc_coluna] = '\0';
+    calc_linha += 1;
+    calc_coluna = 0;
 }
 
 // Armazena o valor do operando 2 e realiza a operação desejada
-void reacaoRealizaOperacao() {
-    int operando2 = registradorAuxiliar;
-    registradorAuxiliar = 0;
+void calc_reacaoRealizaOperacao() {
+    int operando2 = calc_registradorAuxiliar;
+    calc_registradorAuxiliar = 0;
 
-    if (operacao == '+') {
-        acumulador = operando1 + operando2;
-    } else if (operacao == '-') {
-        acumulador = operando1 - operando2;
-    } else if (operacao == '*') {
-        acumulador = operando1 * operando2;
-    } else if (operacao == '/') {
-        acumulador = operando1 / operando2;
-    } else if (operacao == '=') {
-        regs[ultimoReg] = acumulador;
+    if (calc_operacao == '+') {
+        calc_acumulador = calc_operando1 + operando2;
+    } else if (calc_operacao == '-') {
+        calc_acumulador = calc_operando1 - operando2;
+    } else if (calc_operacao == '*') {
+        calc_acumulador = calc_operando1 * operando2;
+    } else if (calc_operacao == '/') {
+        calc_acumulador = calc_operando1 / operando2;
+    } else if (calc_operacao == '=') {
+        calc_regs[calc_ultimoReg] = calc_acumulador;
     }
 
-    if (operacao == '=') {
-        printf("> R%d=%d\n\n", ultimoReg, regs[ultimoReg]);
+    if (calc_operacao == '=') {
+        printf("> R%d=%d\n\n", calc_ultimoReg, calc_regs[calc_ultimoReg]);
     } else {
-        printAcc();
+        calc_printAcc();
     }
 }
 
@@ -153,283 +166,286 @@ void reacaoRealizaOperacao() {
 
 // Obtem um evento da entrada padrao (stdin).
 // Retorna 1 se foi possivel obter um evento, 0 caso contrario.
-void extrairEvento() {
-    charEvento = getc(stdin);
-    if (('0' <= charEvento && charEvento <= '9')) { // digitos 0-9
-        tipoDeEvento = DIGITO;
-    } else if (charEvento == '+' || charEvento == '-' || charEvento == '*' ||
-               charEvento == '/') {
-        tipoDeEvento = OP_ARIT;
-    } else if (charEvento == '=') {
-        tipoDeEvento = IGUAL;
-    } else if (charEvento == 'R') {
-        tipoDeEvento = R;
-    } else if (charEvento == '~') {
-        tipoDeEvento = TIL;
-    } else if (charEvento == 'X') {
-        tipoDeEvento = X;
-    } else if (charEvento == '\n') {
-        tipoDeEvento = ENTER;
-    } else if (charEvento == 'P') {
-        tipoDeEvento = P;
-    } else if (charEvento == 'L') {
-        tipoDeEvento = L;
-    } else if (charEvento == '&') {
-        tipoDeEvento = E_COMERCIAL;
+void calc_extrairEvento() {
+    calc_charEvento = getc(stdin);
+    if (('0' <= calc_charEvento && calc_charEvento <= '9')) { // digitos 0-9
+        calc_tipoDeEvento = CALC_DIGITO;
+    } else if (calc_charEvento == '+' || calc_charEvento == '-' ||
+               calc_charEvento == '*' || calc_charEvento == '/') {
+        calc_tipoDeEvento = CALC_OP_ARIT;
+    } else if (calc_charEvento == '=') {
+        calc_tipoDeEvento = CALC_IGUAL;
+    } else if (calc_charEvento == 'R') {
+        calc_tipoDeEvento = CALC_R;
+    } else if (calc_charEvento == '~') {
+        calc_tipoDeEvento = CALC_TIL;
+    } else if (calc_charEvento == 'C') {
+        calc_tipoDeEvento = CALC_C;
+    } else if (calc_charEvento == 'S') {
+        calc_tipoDeEvento = CALC_S;
+    } else if (calc_charEvento == '\n') {
+        calc_tipoDeEvento = CALC_ENTER;
+    } else if (calc_charEvento == 'P') {
+        calc_tipoDeEvento = CALC_P;
+    } else if (calc_charEvento == 'L') {
+        calc_tipoDeEvento = CALC_L;
+    } else if (calc_charEvento == '&') {
+        calc_tipoDeEvento = CALC_E_COMERCIAL;
     } else {
-        tipoDeEvento = OUTROS;
+        calc_tipoDeEvento = CALC_OUTROS;
     }
 }
 
 int main() {
-    while (estado != TERMINAL) {
-        extrairEvento();
+    while (calc_estado != CALC_TERMINAL) {
+        calc_extrairEvento();
 
-        switch (estado) {
-        case INICIO:
-            switch (tipoDeEvento) {
-            case DIGITO:
-                estado = NUM1;
-                reacaoLerDigito();
+        switch (calc_estado) {
+        case CALC_INICIO:
+            switch (calc_tipoDeEvento) {
+            case CALC_DIGITO:
+                calc_estado = CALC_NUM1;
+                calc_reacaoLerDigito();
                 break;
-            case R:
-                estado = REG1;
+            case CALC_R:
+                calc_estado = CALC_REG1;
                 break;
-            case ENTER:
+            case CALC_ENTER:
                 // sem efeito
                 break;
-            case TIL:
-            case X:
-                estado = ESPERA;
-                reacaoLerOperacao();
+            case CALC_TIL:
+            case CALC_C:
+            case CALC_S:
+                calc_estado = CALC_ESPERA;
+                calc_reacaoLerOperacao();
                 break;
-            case OP_ARIT:
-                estado = NUM2REG2;
-                reacaoLerOperacaoAtualizarOperando();
+            case CALC_OP_ARIT:
+                calc_estado = CALC_NUM2REG2;
+                calc_reacaoLerOperacaoAtualizarOperando();
                 break;
-            case IGUAL:
-                estado = SET;
-                reacaoLerOperacao();
+            case CALC_IGUAL:
+                calc_estado = CALC_SET;
+                calc_reacaoLerOperacao();
                 break;
-            case P:
-                estado = BP;
+            case CALC_P:
+                calc_estado = CALC_BP;
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case NUM1:
-            switch (tipoDeEvento) {
-            case DIGITO:
-                estado = NUM1;
-                reacaoLerDigito();
+        case CALC_NUM1:
+            switch (calc_tipoDeEvento) {
+            case CALC_DIGITO:
+                calc_estado = CALC_NUM1;
+                calc_reacaoLerDigito();
                 break;
-            case OP_ARIT:
-                estado = NUM2REG2;
-                reacaoLerOperacaoSalvarNum();
+            case CALC_OP_ARIT:
+                calc_estado = CALC_NUM2REG2;
+                calc_reacaoLerOperacaoSalvarNum();
                 break;
-            case ENTER:
-                estado = INICIO;
+            case CALC_ENTER:
+                calc_estado = CALC_INICIO;
                 reacaoAtualizaAcumulador();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case NUM2:
-            switch (tipoDeEvento) {
-            case DIGITO:
-                estado = NUM2;
-                reacaoLerDigito();
+        case CALC_NUM2:
+            switch (calc_tipoDeEvento) {
+            case CALC_DIGITO:
+                calc_estado = CALC_NUM2;
+                calc_reacaoLerDigito();
                 break;
-            case ENTER:
-                estado = INICIO;
-                reacaoRealizaOperacao();
+            case CALC_ENTER:
+                calc_estado = CALC_INICIO;
+                calc_reacaoRealizaOperacao();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case REG1:
-            switch (tipoDeEvento) {
-            case DIGITO:
-                estado = REG1A;
-                reacaoLerRegistrador();
+        case CALC_REG1:
+            switch (calc_tipoDeEvento) {
+            case CALC_DIGITO:
+                calc_estado = CALC_REG1A;
+                calc_reacaoLerRegistrador();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case REG1A:
-            switch (tipoDeEvento) {
-            case OP_ARIT:
-                estado = NUM2REG2;
-                reacaoLerOperacaoSalvarNum();
+        case CALC_REG1A:
+            switch (calc_tipoDeEvento) {
+            case CALC_OP_ARIT:
+                calc_estado = CALC_NUM2REG2;
+                calc_reacaoLerOperacaoSalvarNum();
                 break;
-            case ENTER:
-                estado = INICIO;
+            case CALC_ENTER:
+                calc_estado = CALC_INICIO;
                 reacaoAtualizaAcumulador();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case REG2:
-            switch (tipoDeEvento) {
-            case DIGITO:
-                estado = REG2A;
-                reacaoLerRegistrador();
+        case CALC_REG2:
+            switch (calc_tipoDeEvento) {
+            case CALC_DIGITO:
+                calc_estado = CALC_REG2A;
+                calc_reacaoLerRegistrador();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case REG2A:
-            switch (tipoDeEvento) {
-            case ENTER:
-                estado = INICIO;
-                reacaoRealizaOperacao();
+        case CALC_REG2A:
+            switch (calc_tipoDeEvento) {
+            case CALC_ENTER:
+                calc_estado = CALC_INICIO;
+                calc_reacaoRealizaOperacao();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case NUM2REG2:
-            switch (tipoDeEvento) {
-            case R:
-                estado = REG2;
+        case CALC_NUM2REG2:
+            switch (calc_tipoDeEvento) {
+            case CALC_R:
+                calc_estado = CALC_REG2;
                 break;
-            case DIGITO:
-                estado = NUM2;
-                reacaoLerDigito();
+            case CALC_DIGITO:
+                calc_estado = CALC_NUM2;
+                calc_reacaoLerDigito();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case ESPERA:
-            switch (tipoDeEvento) {
-            case ENTER:
-                estado = INICIO;
-                reacaoRealizaTilOuX();
+        case CALC_ESPERA:
+            switch (calc_tipoDeEvento) {
+            case CALC_ENTER:
+                calc_estado = CALC_INICIO;
+                calc_reacaoRealizaTilOuX();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case SET:
-            switch (tipoDeEvento) {
-            case R:
-                estado = REG2;
+        case CALC_SET:
+            switch (calc_tipoDeEvento) {
+            case CALC_R:
+                calc_estado = CALC_REG2;
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case BP:
-            switch (tipoDeEvento) {
-            case ENTER:
-                estado = P_INICIO;
+        case CALC_BP:
+            switch (calc_tipoDeEvento) {
+            case CALC_ENTER:
+                calc_estado = CALC_P_INICIO;
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case PB:
-            switch (tipoDeEvento) {
-            case ENTER:
-                estado = INICIO;
+        case CALC_PB:
+            switch (calc_tipoDeEvento) {
+            case CALC_ENTER:
+                calc_estado = CALC_INICIO;
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case P_INICIO:
-            switch (tipoDeEvento) {
-            case E_COMERCIAL:
-                reacaoLerOperacao();
-                estado = P_ARG;
+        case CALC_P_INICIO:
+            switch (calc_tipoDeEvento) {
+            case CALC_E_COMERCIAL:
+                calc_reacaoLerOperacao();
+                calc_estado = CALC_P_ARG;
                 break;
-            case L:
-                reacaoLerOperacao();
-                estado = P_LISTAR;
+            case CALC_L:
+                calc_reacaoLerOperacao();
+                calc_estado = CALC_P_LISTAR;
                 break;
-            case P:
-                estado = PB;
+            case CALC_P:
+                calc_estado = CALC_PB;
                 break;
-            case ENTER:
-                reacaoProximaLinha();
+            case CALC_ENTER:
+                calc_reacaoProximaLinha();
                 break;
             default:
-                estado = P_CODIGO;
-                reacaoLerCodigo();
+                calc_estado = CALC_P_CODIGO;
+                calc_reacaoLerCodigo();
                 break;
             }
             break;
-        case P_CODIGO:
-            switch (tipoDeEvento) {
-            case ENTER:
-                estado = P_INICIO;
-                reacaoProximaLinha();
+        case CALC_P_CODIGO:
+            switch (calc_tipoDeEvento) {
+            case CALC_ENTER:
+                calc_estado = CALC_P_INICIO;
+                calc_reacaoProximaLinha();
                 break;
             default:
-                reacaoLerCodigo();
+                calc_reacaoLerCodigo();
                 break;
             }
             break;
-        case P_ARG:
-            switch (tipoDeEvento) {
-            case ENTER:
-                estado = P_INICIO;
-                reacaoSetOperando1();
+        case CALC_P_ARG:
+            switch (calc_tipoDeEvento) {
+            case CALC_ENTER:
+                calc_estado = CALC_P_INICIO;
+                calc_reacaoSetOperando1();
                 break;
-            case DIGITO:
-                estado = P_ARG;
-                reacaoLerDigito();
+            case CALC_DIGITO:
+                calc_estado = CALC_P_ARG;
+                calc_reacaoLerDigito();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
-        case P_LISTAR:
-            switch (tipoDeEvento) {
-            case ENTER:
-                estado = P_INICIO;
-                reacaoLerOperacao();
+        case CALC_P_LISTAR:
+            switch (calc_tipoDeEvento) {
+            case CALC_ENTER:
+                calc_estado = CALC_P_INICIO;
+                calc_reacaoLerOperacao();
                 break;
-            case DIGITO:
-                estado = P_ARG;
-                reacaoLerDigito();
+            case CALC_DIGITO:
+                calc_estado = CALC_P_ARG;
+                calc_reacaoLerDigito();
                 break;
             default:
-                estado = TERMINAL;
-                reacaoErro();
+                calc_estado = CALC_TERMINAL;
+                calc_reacaoErro();
                 break;
             }
             break;
