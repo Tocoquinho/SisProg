@@ -4,10 +4,10 @@
 #define NUM_REG 10
 
 // numero de linhas programaveis
-#define NUM_LINHAS 0x1024
+#define NUM_LINHAS 1000
 
 // comprimento maximo de uma linha programavel
-#define COMPRIMENTO_MAX_LINHA 0x32
+#define COMPRIMENTO_MAX_LINHA 32
 
 // Define um valor numerico para cada um dos estados possiveis para a
 // calculadora
@@ -52,7 +52,7 @@ void interp_rodarMotorDeEventos();
 int interp_ehModoContinuo;
 
 unsigned char programa[NUM_LINHAS]
-                      [COMPRIMENTO_MAX_LINHA + 1]; // memoria programável
+                      [COMPRIMENTO_MAX_LINHA + 2]; // memoria programável
 unsigned int regs[NUM_REG];                        // registradores
 
 int calc_estado = CALC_INICIO; // estado da maquina de estados
@@ -70,15 +70,25 @@ int calc_ultimoReg = 0;
 int calc_linha = 0;  // posicao do cursor
 int calc_coluna = 0; // na memoria
 
+int calc_maiorLinha = 0; // maior numero de linha que ja foi escrito
+
 /********************************
  *********** REACOES ************
  ********************************/
 
-void calc_printAcc() { printf("> %d\n\n", calc_acumulador); }
+void calc_printAcc() { printf("> %d\n", calc_acumulador); }
+
+void calc_listar(int linha) {
+    if (programa[linha][0] == 0) {
+        printf("[%03d] \n", linha);
+    } else {
+        printf("[%03d] %s", linha, programa[linha]);
+    }
+}
 
 // Indica erro de execucao
 void calc_reacaoErro() {
-    printf("erro: caractere invalido '%c'\n", calc_charEvento);
+    printf("Erro: caractere invalido '%c'\n", calc_charEvento);
 }
 
 // Atualiza o acumulador com o número fornecido
@@ -98,6 +108,22 @@ void calc_reacaoLerDigito() {
 void calc_reacaoLerRegistrador() {
     calc_ultimoReg = calc_charEvento - '0';
     calc_registradorAuxiliar = regs[calc_ultimoReg];
+}
+
+void calc_reacaoListarOuAlterarLinha() {
+    if (calc_operacao == 'L') {
+        calc_listar(calc_registradorAuxiliar);
+    } else if (calc_operacao == '&') {
+        calc_linha = calc_registradorAuxiliar;
+        calc_coluna = 0;
+    }
+    calc_registradorAuxiliar = 0;
+}
+
+void calc_reacaoListarTudo() {
+    for (int i = 0; i <= calc_maiorLinha; i++) {
+        calc_listar(i);
+    }
 }
 
 // Armazena a operação fornecida
@@ -135,13 +161,23 @@ void calc_reacaoLerOperacaoAtualizarOperando() {
 }
 
 void calc_reacaoLerCodigo() {
+    if (calc_coluna >= COMPRIMENTO_MAX_LINHA) {
+        if (calc_coluna == COMPRIMENTO_MAX_LINHA) {
+            printf("Erro: linha grande demais\n");
+        }
+        return;
+    }
     programa[calc_linha][calc_coluna] = calc_charEvento;
     calc_coluna++;
 }
 
 void calc_reacaoProximaLinha() {
-    programa[calc_linha][calc_coluna] = '\0';
+    programa[calc_linha][calc_coluna] = '\n';
+    programa[calc_linha][calc_coluna + 1] = '\0';
     calc_linha += 1;
+    if (calc_linha > calc_maiorLinha) {
+        calc_maiorLinha = calc_linha;
+    }
     calc_coluna = 0;
 }
 
@@ -163,7 +199,7 @@ void calc_reacaoRealizaOperacao() {
     }
 
     if (calc_operacao == '=') {
-        printf("> R%d=%d\n\n", calc_ultimoReg, regs[calc_ultimoReg]);
+        printf("> R%d=%d\n", calc_ultimoReg, regs[calc_ultimoReg]);
     } else {
         calc_printAcc();
     }
@@ -206,7 +242,26 @@ void calc_extrairEvento() {
 
 // Roda o loop principal do motor de eventos da calculadora
 void calc_rodarMotorDeEventos() {
+    // Reseta os valores das variaveis globais
+    // (ver descricao no topo do arquivo)
+    calc_estado = CALC_INICIO;
+    calc_charEvento = 0;
+    calc_tipoDeEvento = 0;
+    calc_operacao = 0;
+    calc_acumulador = 0;
+    calc_registradorAuxiliar = 0;
+    calc_operando1 = 0;
+    calc_ultimoReg = 0;
+    calc_linha = 0;
+    calc_coluna = 0;
+    calc_maiorLinha = 0;
+
     while (calc_estado != CALC_TERMINAL) {
+        if (calc_estado == CALC_INICIO) {
+            printf("calc$ ");
+        } else if (calc_estado == CALC_P_INICIO) {
+            printf("[%03d] prog$ ", calc_linha);
+        }
         calc_extrairEvento();
 
         switch (calc_estado) {
@@ -430,7 +485,7 @@ void calc_rodarMotorDeEventos() {
             switch (calc_tipoDeEvento) {
             case CALC_ENTER:
                 calc_estado = CALC_P_INICIO;
-                calc_reacaoSetOperando1();
+                calc_reacaoListarOuAlterarLinha();
                 break;
             case CALC_DIGITO:
                 calc_estado = CALC_P_ARG;
@@ -446,7 +501,7 @@ void calc_rodarMotorDeEventos() {
             switch (calc_tipoDeEvento) {
             case CALC_ENTER:
                 calc_estado = CALC_P_INICIO;
-                calc_reacaoLerOperacao();
+                calc_reacaoListarTudo();
                 break;
             case CALC_DIGITO:
                 calc_estado = CALC_P_ARG;

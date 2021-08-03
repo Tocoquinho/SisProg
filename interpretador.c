@@ -3,6 +3,7 @@
 // Define um valor numerico para cada um dos cinco estados possiveis
 enum Interp_Estado {
     INTERP_INICIO,
+    INTERP_AGUARDA_PASSO,
     INTERP_COMENTARIO,
     INTERP_LABEL_DESCARTE,
     INTERP_REGDEST,
@@ -18,6 +19,7 @@ enum Interp_Estado {
     INTERP_NUM2,
     INTERP_REG2,
     INTERP_REG2A,
+    INTERP_FIM,
     INTERP_TERMINAL,
 };
 
@@ -62,28 +64,46 @@ int interp_coluna = 0;
 void interp_realizarDesvio() {
     for (int i = 0; i < NUM_LINHAS; i++) {
         int sucesso = 1;
-        for (int j = 0; interp_targetLabel[j]; j++) {
-            if (programa[i][j] != interp_targetLabel[j]) {
+        for (int j = 0; j < interp_comprimentoTargetLabel; j++) {
+            if (programa[i][j + 1] != interp_targetLabel[j]) {
                 sucesso = 0;
                 break;
             }
         }
-        if (sucesso) {
+        if (sucesso && programa[i][0] == ':') {
             interp_linha = i;
-            interp_coluna = 0;
+            interp_coluna = -1; // esse valor sera incrementado pelo motor de
+                                // eventos antes da proxima iteracao
+            interp_estado =
+                interp_ehModoContinuo ? INTERP_INICIO : INTERP_AGUARDA_PASSO;
+            interp_comprimentoTargetLabel = 0; // reseta target
+
+            if (!interp_ehModoContinuo) {
+                printf("Desvio para a linha %d\n", interp_linha);
+            }
             return;
         }
     }
 
-    printf("Label invalido: ");
+    printf("Erro: label invalido (linha %d): ", interp_linha);
     for (int i = 0; i < interp_comprimentoTargetLabel; i++) {
         putc(interp_targetLabel[i], stdout);
     }
+    printf("\n");
+    interp_estado = INTERP_TERMINAL;
+    interp_comprimentoTargetLabel = 0; // reseta target
 }
 
 // Indica erro de execucao
 void interp_reacaoErro() {
-    printf("erro: caractere invalido '%c'\n", interp_charEvento);
+    printf("Erro: caractere invalido '%c' na linha %d, coluna %d em:\n",
+           interp_charEvento, interp_linha, interp_coluna);
+    if (interp_linha > 0)
+        calc_listar(interp_linha - 1);
+    calc_listar(interp_linha);
+    if (interp_linha < NUM_LINHAS - 1)
+        calc_listar(interp_linha + 1);
+    printf("\n");
 }
 
 // Armazena o digito fornecido
@@ -172,6 +192,7 @@ void interp_reacaoRealizaOperacao() {
         if (cond) {
             interp_realizarDesvio();
         }
+        interp_comprimentoTargetLabel = 0;
     }
 }
 
@@ -181,7 +202,11 @@ void interp_reacaoRealizaOperacao() {
 
 // Obtem um evento do codigo programado (variavel `programa`)
 void interp_extrairEvento() {
-    interp_charEvento = programa[interp_linha][interp_coluna];
+    if (interp_estado == INTERP_AGUARDA_PASSO) {
+        interp_charEvento = getc(stdin);
+    } else {
+        interp_charEvento = programa[interp_linha][interp_coluna];
+    }
     if (('0' <= interp_charEvento && interp_charEvento <= '9')) { // digitos 0-9
         interp_tipoDeEvento = INTERP_DIGITO;
     } else if (interp_charEvento == '+' || interp_charEvento == '-' ||
@@ -212,17 +237,45 @@ void interp_extrairEvento() {
 
 // Roda o loop principal do motor de eventos do interpretador
 void interp_rodarMotorDeEventos() {
+    // Reseta os valores das variaveis globais
+    // (ver descricao no topo do arquivo)
+    interp_estado =
+        interp_ehModoContinuo ? INTERP_INICIO : INTERP_AGUARDA_PASSO;
+    interp_charEvento = 0;
+    interp_tipoDeEvento = 0;
+    interp_operacao = 0;
+    interp_registradorAuxiliar = 0;
+    interp_registradorDestino = 0;
+    interp_operando1 = 0;
+    interp_linha = 0;
+    interp_coluna = 0;
+    interp_comprimentoTargetLabel = 0;
+
+    int ultimaLinhaImpressa = -1;
+
     while (interp_estado != INTERP_TERMINAL) {
+        if (!interp_ehModoContinuo && ultimaLinhaImpressa != interp_linha) {
+            for (int i = 0; i < NUM_REG; i++) {
+                printf("R%d=%d ", i, regs[i]);
+            }
+            printf("\nProxima linha:  ");
+            calc_listar(interp_linha);
+
+            ultimaLinhaImpressa = interp_linha;
+            printf("Auxiliar:  %d\n", interp_registradorAuxiliar);
+        }
+
         interp_extrairEvento();
 
         switch (interp_estado) {
         case INTERP_INICIO:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_PONTO_VIRGULA:
                 interp_estado = INTERP_COMENTARIO;
                 break;
             case INTERP_DOIS_PONTOS:
                 interp_estado = INTERP_LABEL_DESCARTE;
+                interp_reacaoLerOperacao();
                 break;
             case INTERP_OP_ARIT:
             case INTERP_IGUAL:
@@ -234,11 +287,14 @@ void interp_rodarMotorDeEventos() {
                 interp_reacaoLerOperacao();
                 break;
             case INTERP_ESPACO:
+                // sem efeitos
+                break;
             case INTERP_ENTER:
-                // sem efeito
+                interp_estado = interp_ehModoContinuo ? INTERP_INICIO
+                                                      : INTERP_AGUARDA_PASSO;
                 break;
             case INTERP_PONTO:
-                interp_estado = INTERP_TERMINAL;
+                interp_estado = INTERP_FIM;
                 break;
             default:
                 interp_estado = INTERP_TERMINAL;
@@ -246,8 +302,8 @@ void interp_rodarMotorDeEventos() {
                 break;
             }
             break;
-        case INTERP_COMENTARIO:
-            switch (interp_charEvento) {
+        case INTERP_AGUARDA_PASSO:
+            switch (interp_tipoDeEvento) {
             case INTERP_ENTER:
                 interp_estado = INTERP_INICIO;
                 break;
@@ -255,9 +311,20 @@ void interp_rodarMotorDeEventos() {
                 // sem efeito
                 break;
             }
+            continue;
+        case INTERP_COMENTARIO:
+            switch (interp_tipoDeEvento) {
+            case INTERP_ENTER:
+                interp_estado = interp_ehModoContinuo ? INTERP_INICIO
+                                                      : INTERP_AGUARDA_PASSO;
+                break;
+            default:
+                // sem efeito
+                break;
+            }
             break;
         case INTERP_LABEL_DESCARTE:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_ESPACO:
                 interp_estado = INTERP_INICIO;
                 break;
@@ -271,7 +338,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_REGDEST:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_R:
                 interp_estado = INTERP_REGDESTA;
                 break;
@@ -282,7 +349,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_REGDESTA:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_DIGITO:
                 interp_estado = INTERP_SEPARADOR;
                 interp_reacaoLerRegistradorDestino();
@@ -294,7 +361,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_SEPARADOR:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_VIRGULA:
                 interp_estado =
                     (interp_operacao == '=') ? INTERP_VAL2 : INTERP_VAL1;
@@ -306,7 +373,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_BRANCH:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_ESPACO:
                 interp_estado = INTERP_LABEL;
                 break;
@@ -317,7 +384,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_LABEL:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_VIRGULA:
                 interp_estado = INTERP_VAL1;
                 break;
@@ -326,7 +393,8 @@ void interp_rodarMotorDeEventos() {
                 interp_reacaoErro();
                 break;
             case INTERP_ENTER:
-                interp_estado = INTERP_INICIO;
+                interp_estado = interp_ehModoContinuo ? INTERP_INICIO
+                                                      : INTERP_AGUARDA_PASSO;
                 interp_reacaoDesvioIncondicional();
                 break;
             default:
@@ -335,7 +403,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_VAL1:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_DIGITO:
                 interp_estado = INTERP_NUM1;
                 interp_reacaoLerDigito();
@@ -350,7 +418,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_NUM1:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_DIGITO:
                 interp_reacaoLerDigito();
                 break;
@@ -365,7 +433,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_REG1:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_DIGITO:
                 interp_estado = INTERP_REG1A;
                 interp_reacaoLerRegistrador();
@@ -377,9 +445,10 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_REG1A:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_VIRGULA:
                 interp_estado = INTERP_VAL2;
+                interp_reacaoSetOperando1();
                 break;
             default:
                 interp_estado = INTERP_TERMINAL;
@@ -388,7 +457,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_VAL2:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_DIGITO:
                 interp_estado = INTERP_NUM2;
                 interp_reacaoLerDigito();
@@ -403,12 +472,13 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_NUM2:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_DIGITO:
                 interp_reacaoLerDigito();
                 break;
             case INTERP_ENTER:
-                interp_estado = INTERP_INICIO;
+                interp_estado = interp_ehModoContinuo ? INTERP_INICIO
+                                                      : INTERP_AGUARDA_PASSO;
                 interp_reacaoRealizaOperacao();
                 break;
             default:
@@ -418,7 +488,7 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_REG2:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_DIGITO:
                 interp_estado = INTERP_REG2A;
                 interp_reacaoLerRegistrador();
@@ -430,10 +500,22 @@ void interp_rodarMotorDeEventos() {
             }
             break;
         case INTERP_REG2A:
-            switch (interp_charEvento) {
+            switch (interp_tipoDeEvento) {
             case INTERP_ENTER:
-                interp_estado = INTERP_INICIO;
+                interp_estado = interp_ehModoContinuo ? INTERP_INICIO
+                                                      : INTERP_AGUARDA_PASSO;
                 interp_reacaoRealizaOperacao();
+                break;
+            default:
+                interp_estado = INTERP_TERMINAL;
+                interp_reacaoErro();
+                break;
+            }
+            break;
+        case INTERP_FIM:
+            switch (interp_tipoDeEvento) {
+            case INTERP_ENTER:
+                interp_estado = INTERP_TERMINAL;
                 break;
             default:
                 interp_estado = INTERP_TERMINAL;
@@ -447,6 +529,13 @@ void interp_rodarMotorDeEventos() {
         if (programa[interp_linha][interp_coluna] == 0) {
             interp_linha++;
             interp_coluna = 0;
+        }
+        // printf("linha=%d coluna=%d estado=%d\n", interp_linha,
+        //        interp_coluna, interp_estado);
+        if (interp_linha >= NUM_LINHAS) {
+            interp_estado = INTERP_TERMINAL;
+            printf("Erro: fim do programa atingido sem comando de fim "
+                   "('.')\n");
         }
     }
 }
