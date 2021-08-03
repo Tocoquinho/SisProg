@@ -1,5 +1,14 @@
 #include "stdio.h"
 
+// numero de registradores
+#define NUM_REG 10
+
+// numero de linhas programaveis
+#define NUM_LINHAS 0x1024
+
+// comprimento maximo de uma linha programavel
+#define COMPRIMENTO_MAX_LINHA 0x32
+
 // Define um valor numerico para cada um dos estados possiveis para a
 // calculadora
 enum Calc_Estado {
@@ -39,17 +48,13 @@ enum Calc_TipoDeEvento {
     CALC_OUTROS,
 };
 
-// numero de registradores
-#define NUM_REG 10
+void interp_rodarMotorDeEventos();
+int interp_ehModoContinuo;
 
-// numero de linhas programaveis
-#define NUM_LINHAS 0x1024
+unsigned char programa[NUM_LINHAS]
+                      [COMPRIMENTO_MAX_LINHA + 1]; // memoria programável
+unsigned int regs[NUM_REG];                        // registradores
 
-// comprimento maximo de uma linha programavel
-#define COMPRIMENTO_MAX_LINHA 0x32
-
-unsigned char programa[NUM_LINHAS][COMPRIMENTO_MAX_LINHA + 1]; // memoria programável
-unsigned int calc_regs[NUM_REG];                               // registradores
 int calc_estado = CALC_INICIO; // estado da maquina de estados
 int calc_charEvento = 0;       // char lido da entrada padrao (stdin)
 int calc_tipoDeEvento = 0;     // tipo do evento (Calc_TIPO_DE_EVENTO)
@@ -92,7 +97,7 @@ void calc_reacaoLerDigito() {
 // Armazena o valor do registrador especificado
 void calc_reacaoLerRegistrador() {
     calc_ultimoReg = calc_charEvento - '0';
-    calc_registradorAuxiliar = calc_regs[calc_ultimoReg];
+    calc_registradorAuxiliar = regs[calc_ultimoReg];
 }
 
 // Armazena a operação fornecida
@@ -107,8 +112,12 @@ void calc_reacaoRealizaTilOuX() {
     if (calc_operacao == '~') {
         calc_acumulador = -calc_acumulador;
         calc_printAcc();
-    } else if (calc_operacao == 'X') {
-        printf("TODO: executar o interpretador");
+    } else if (calc_operacao == 'C') {
+        interp_ehModoContinuo = 1;
+        interp_rodarMotorDeEventos();
+    } else if (calc_operacao == 'S') {
+        interp_ehModoContinuo = 0;
+        interp_rodarMotorDeEventos();
     }
 }
 
@@ -150,11 +159,11 @@ void calc_reacaoRealizaOperacao() {
     } else if (calc_operacao == '/') {
         calc_acumulador = calc_operando1 / operando2;
     } else if (calc_operacao == '=') {
-        calc_regs[calc_ultimoReg] = calc_acumulador;
+        regs[calc_ultimoReg] = calc_acumulador;
     }
 
     if (calc_operacao == '=') {
-        printf("> R%d=%d\n\n", calc_ultimoReg, calc_regs[calc_ultimoReg]);
+        printf("> R%d=%d\n\n", calc_ultimoReg, regs[calc_ultimoReg]);
     } else {
         calc_printAcc();
     }
@@ -165,7 +174,6 @@ void calc_reacaoRealizaOperacao() {
  ********************************/
 
 // Obtem um evento da entrada padrao (stdin).
-// Retorna 1 se foi possivel obter um evento, 0 caso contrario.
 void calc_extrairEvento() {
     calc_charEvento = getc(stdin);
     if (('0' <= calc_charEvento && calc_charEvento <= '9')) { // digitos 0-9
@@ -196,7 +204,8 @@ void calc_extrairEvento() {
     }
 }
 
-int main() {
+// Roda o loop principal do motor de eventos da calculadora
+void calc_rodarMotorDeEventos() {
     while (calc_estado != CALC_TERMINAL) {
         calc_extrairEvento();
 
